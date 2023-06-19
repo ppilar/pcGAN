@@ -11,8 +11,12 @@ def plot_ebm_ax(ebm, z, ax, jcz=False, hist=False, hist_opts = -1, xmax = False,
     
     off = torch.maximum(torch.abs(ebm.cmaxs[jcz]), torch.abs(ebm.cmins[jcz])).cpu()*0.05
     zvec = np.linspace(ebm.cmins[jcz].cpu()-off, ebm.cmaxs[jcz].cpu() + off, 500)
+    crange = None
     if jcz == 15 and c15_bounds: #used to focus on relevant region of plot
-        zvec = np.linspace(ebm.cmins[jcz].cpu()-off/3, ebm.cmaxs[jcz].cpu()/6 + off/6, 500)
+        zmin = ebm.cmins[jcz].cpu()-off/3
+        zmax = ebm.cmaxs[jcz].cpu()/6 + off/6
+        zvec = np.linspace(zmin, zmax, 500)
+        crange = (zmin.item(), zmax.item())
         
     if conditional:
         clabels = jcz*torch.ones(500, device=ebm.device).int()
@@ -34,9 +38,9 @@ def plot_ebm_ax(ebm, z, ax, jcz=False, hist=False, hist_opts = -1, xmax = False,
     
     if hist==True:
         if type(hist_opts) == int:
-            ax.hist(z, bins=20, density=True);
+            ax.hist(z, bins=20, density=True, range=crange);
         else:
-            ax.hist(z, bins=20, density=True, color=hist_opts[0], alpha=hist_opts[1]);
+            ax.hist(z, bins=20, density=True, range=crange, color=hist_opts[0], alpha=hist_opts[1]);
                 
     if type(xmax) == bool:
         ax.set_xlim((zvec[0], zvec[-1]))

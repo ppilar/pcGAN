@@ -52,12 +52,14 @@ fsig_best = fsig_vec[iKLs_min]
 
 #%% summary plot
 
+if ds_opt == 1: ds.cplot15_bounds = True
 labels = [ds.constraint_names[j] for j in ajcx]
 fig, axs = plt.subplots(2,4, figsize=(22,9))
 fig.tight_layout(h_pad=3)
 plt.rcParams['font.size'] = 14
 for j, jcx in enumerate(ajcx):
     yl_opt = True if j == 0 else False
+    
     axplot_KLdiv(axs[0,j], fsig_vec, KLs[jcx], labels[j], lvec, ylim = KL_ylim, yl_opt = yl_opt)
     axplot_Gmix(axs[1,j], ds, net_ebm, bsvec, fsig_best, jcx)
 

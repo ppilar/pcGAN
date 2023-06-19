@@ -10,6 +10,7 @@ def initialize_cebm_ds(ds_opt):
     use_cvalue_input = False
     if ds_opt == 1:
         path0 = '../results/ds1_Nd_1_bs_256/wave_forms/'
+        fname = 'ds1_ebms_v0.pk'
         ajcx = [0, 15, 30]
         jcx_long_tails = 15
         KL_ylim = [1e-2, 5e1]
@@ -17,6 +18,7 @@ def initialize_cebm_ds(ds_opt):
         pinds = [0,4,5]
     if ds_opt == 2:
         path0 = '../results/ds2_Nd_1_bs_256/Tmaps/'
+        fname = 'ds2_ebms.pk'
         ajcx = [0, 15, 30]
         jcx_long_tails = 0
         KL_ylim = [1e-2, 5e1]
@@ -24,6 +26,7 @@ def initialize_cebm_ds(ds_opt):
         pinds = [1,4,7]
     if ds_opt == 3:
         path0 = '../results/ds3_Nd_1_bs_256/IceCube/'
+        fname = 'ds3_ebms.pk'
         ajcx = [0,1]
         jcx_long_tails = 0
         KL_ylim = [1e-2, 5e1]  
@@ -63,7 +66,7 @@ def axplot_KLdiv(ax, fsig_vec, KLs, title, lvec, ylim=[1e-2, 5e1], yl_opt = Fals
 def axplot_Gmix(ax, ds, net_ebm, bsvec, fsig_best, jcx, xl_str = '', xmax=False):
     cmin = ds.constraints[:,jcx].min().cpu()
     cmax = ds.constraints[:,jcx].max().cpu()
-    x = np.linspace(cmin,cmax,100)
+    x = np.linspace(cmin,cmax,500)
     
     for jbs, bs in enumerate(bsvec[:]):        
         _, cmb = sample_mb(ds, bs)
@@ -72,9 +75,9 @@ def axplot_Gmix(ax, ds, net_ebm, bsvec, fsig_best, jcx, xl_str = '', xmax=False)
         ax.plot(x,y,'--',label='bs='+str(bs))
     
     if type(xmax) == bool:
-        plot_ebm_ax(net_ebm, ds.constraints[:,jcx].cpu(), ax, jcz=jcx, hist=True, hist_opts=('grey',0.3))        
+        plot_ebm_ax(net_ebm, ds.constraints[:,jcx].cpu(), ax, jcz=jcx, hist=True, hist_opts=('grey',0.3), c15_bounds = ds.cplot15_bounds)        
     else:
-        plot_ebm_ax(net_ebm, ds.constraints[:,jcx].cpu(), ax, jcz=jcx, hist=True, hist_opts=('grey',0.3), xmax = xmax)
+        plot_ebm_ax(net_ebm, ds.constraints[:,jcx].cpu(), ax, jcz=jcx, hist=True, hist_opts=('grey',0.3), xmax = xmax, c15_bounds = ds.cplot15_bounds)
 
     ax.get_lines()[-1].set_color("black")
     ax.legend()
