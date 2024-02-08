@@ -2,7 +2,7 @@
 import pickle
 import torch
 import numpy as np
-from .plots import plot_ebm_ax
+from .axplots import axplot_ebm_hist
 
 #initialize parameters and load results for ds_opt
 def initialize_cebm_ds(ds_opt):
@@ -12,9 +12,9 @@ def initialize_cebm_ds(ds_opt):
         path0 = '../results/ds1_Nd_1_bs_256/wave_forms/'
         fname = 'ds1_ebms_v0.pk'
         ajcx = [0, 15, 30]
-        jcx_long_tails = 15
+        jcx_long_tails = 1500
         KL_ylim = [1e-2, 5e1]
-        cinds_selection = [1, 15, 50]
+        cinds_selection = [1, 17, 52]
         pinds = [0,4,5]
     if ds_opt == 2:
         path0 = '../results/ds2_Nd_1_bs_256/Tmaps/'
@@ -33,13 +33,8 @@ def initialize_cebm_ds(ds_opt):
         cinds_selection = [0,1]
         pinds = [1,4,5]
         
-    ppath = path0 + 'plots/'
-    fpath = path0 + 'files/'
-    fname = 'ds' + str(ds_opt) + '_results.pk'
-    with open(fpath + fname, 'rb') as f:
-        ds, net_ebm, res = pickle.load(f)
-    
-    return ds, net_ebm, res, ajcx, jcx_long_tails, KL_ylim, cinds_selection, pinds, ppath
+    return ajcx, jcx_long_tails, KL_ylim, cinds_selection, pinds
+        
         
 #calculate PDF from superposition fo Gaussians
 def superposition_of_gaussians(x, points, sigma=0.5):
@@ -63,7 +58,7 @@ def axplot_KLdiv(ax, fsig_vec, KLs, title, lvec, ylim=[1e-2, 5e1], yl_opt = Fals
     ax.set_ylim(ylim)
 
 #plot Gaussian mixture on ax
-def axplot_Gmix(ax, ds, net_ebm, bsvec, fsig_best, jcx, xl_str = '', xmax=False):
+def axplot_Gmix(ax, ds, net_ebm, bsvec, fsig_best, jcx, xl_str = '', xmax=False, crange_opt = ''):
     cmin = ds.constraints[:,jcx].min().cpu()
     cmax = ds.constraints[:,jcx].max().cpu()
     x = np.linspace(cmin,cmax,500)
@@ -75,9 +70,9 @@ def axplot_Gmix(ax, ds, net_ebm, bsvec, fsig_best, jcx, xl_str = '', xmax=False)
         ax.plot(x,y,'--',label='bs='+str(bs))
     
     if type(xmax) == bool:
-        plot_ebm_ax(net_ebm, ds.constraints[:,jcx].cpu(), ax, jcz=jcx, hist=True, hist_opts=('grey',0.3), c15_bounds = ds.cplot15_bounds)        
+        axplot_ebm_hist(net_ebm, ds.constraints[:,jcx].cpu(), ax, jcz=jcx, hist=True, hist_opts=('grey',0.3), c15_bounds = ds.cplot15_bounds, crange_opt = crange_opt)        
     else:
-        plot_ebm_ax(net_ebm, ds.constraints[:,jcx].cpu(), ax, jcz=jcx, hist=True, hist_opts=('grey',0.3), xmax = xmax, c15_bounds = ds.cplot15_bounds)
+        axplot_ebm_hist(net_ebm, ds.constraints[:,jcx].cpu(), ax, jcz=jcx, hist=True, hist_opts=('grey',0.3), xmax = xmax, c15_bounds = ds.cplot15_bounds, crange_opt = crange_opt)
 
     ax.get_lines()[-1].set_color("black")
     ax.legend()

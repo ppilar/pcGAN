@@ -1,11 +1,22 @@
 #define settings
-if not 'ds_opt' in locals(): ds_opt = 1      #0 ... sum of numbers; 1 ... wave forms; 2 ... CAMELS; 3 ... IceCube
-itmax = 150000
-mode_vec = [1,0,3]   #0 ... (...)GAN, 1 ... GAN + KL, 2 ... KL, 3 ... covariance (Wu et al.)
-load_ds_cebm = 0
+if not 'pars' in locals(): pars = dict() #dictionary that contains training parameters and settings
+if not 'comment' in locals(): comment = '' #dictionary that contains training parameters and settings
 
-#the below parameters can be iterated over from master.py
-if not 'GAN_opt' in locals(): GAN_opt = 1       #0 ... GAN, 1 ... WGAN, 2 ... WGAN-GP
-if not 'bs' in locals(): bs = 256 #batch size
-if not 'Nd' in locals(): Nd = 1   #discriminator updates per iteration
-if not 'Njkl' in locals(): Njkl = 3   #discriminator updates per iteration
+init_par(pars, 'model_vec', [1])  
+#0 ... (...)GAN, 1 ... GAN + KL, 2 ... KL, 3 ... covariance (Wu et al.), 4 ... WGAN-GP, 5 ... SNGAN
+#6 ... WGAN-GP + KL, 7 ... SNGAN + KL
+init_par(pars, 'ds_opt', 1) #0 ... sum of numbers; 1 ... wave forms; 2 ... CAMELS; 3 ... IceCube
+init_par(pars, 'load_ds', 1)
+init_par(pars, 'load_ptrue_rep', 1)
+        
+
+init_par(pars, 'itmax', 100000) #150000
+init_par(pars, 'Nrun', 1)
+
+init_par(pars, 'bs', 128) #batch size
+init_par(pars, 'omega', 5) #weighting factor
+
+
+
+
+        

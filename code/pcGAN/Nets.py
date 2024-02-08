@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import torch
 import torch.nn as nn
-
+from torch.nn.utils.parametrizations import spectral_norm
 
 
 #######################
@@ -60,11 +60,11 @@ class Net(nn.Module):
 
 #conditional fully connected NN
 class cNet(nn.Module): #map from t to x
-    def __init__(self, Uvec = [40]*5, iovec = [1,1], Npar=3, fdrop = 0, bounds = (0,0,0,0), act = 'tanh', normalize = True, device = 'cpu'):
+    def __init__(self, Uvec = [40]*5, iovec = [1,1], Npar=3, fdrop = 0, bounds = (0,0,0,0), act = 'tanh', normalize = True, Nc = 101, device = 'cpu'):
         super(cNet, self).__init__()
  
         self.device = device
-        self.Nc = 101
+        self.Nc = Nc #101
         
         self.embed = nn.Embedding(self.Nc, 30)
         self.fce = nn.Linear(30,15)
@@ -76,8 +76,11 @@ class cNet(nn.Module): #map from t to x
         
         self.bounds = bounds
         
-        self.ylb = torch.tensor(self.bounds[2]).float().to(device)
-        self.yub = torch.tensor(self.bounds[3]).float().to(device)
+        #self.ylb = torch.tensor(self.bounds[2]).float().to(device)
+        #self.yub = torch.tensor(self.bounds[3]).float().to(device)
+        
+        self.ylb = self.bounds[2]
+        self.yub = self.bounds[3]
         
         current_dim = iovec[0]
         self.layers = nn.ModuleList()
@@ -145,9 +148,6 @@ class Generator_1D_large(nn.Module):
         
         stride = 2
         ct1 = (25 - (latent_dim - 1)*stride)
-        # if ct1 < 0:
-        #     opp = -ct1
-        #     ct1 = 1
             
         #25 = (latent_dim - 1)*stride + 1*(ct1-1) + op +1
         if nopt == 'small':
@@ -163,7 +163,7 @@ class Generator_1D_large(nn.Module):
             self.GBlocks.append(GBlock([128,64], ct_stride=2, Nlc=Nlc, output_padding=0, normalize=True, latent_dim = latent_dim))
             self.GBlocks.append(GBlock([64,32], ct_stride=2, Nlc=Nlc, normalize=True, latent_dim = latent_dim))
             self.cf = nn.Conv1d(32, 1, 3, padding='same', stride=1)
-     
+            
     def forward(self, x):
         #print('Generator')
         if x.ndim == 2:
@@ -232,7 +232,8 @@ class GBlock(nn.Module):
         #Nlc ... number of convolutional layers
         
         self.act = torch.tanh
-        self.fnorm = torch.nn.BatchNorm1d     
+        self.fnorm = torch.nn.BatchNorm1d   
+        #self.fnorm = torch.nn.InstanceNorm1d
         self.normalize = normalize
         
         self.Nlc = Nlc
@@ -315,7 +316,105 @@ class DBlock(nn.Module):
         return x
         
         
+#%% spectral normalization
+#############
+############# Discriminator with spectral normalization
+
+
+#discriminator network for waveform dataset
+class Discriminator_SN_1D_large(nn.Module):
+    def __init__(self, ds=0, xvec=-1, nopt = 'small', device='cpu', use_fft_input = False):
+        super(Discriminator_SN_1D_large, self).__init__()
         
+        self.xvec = xvec
+        
+        Nci = 1 if use_fft_input == False else 2
+        self.NB = 4
+        self.DBlocks = nn.ModuleList()
+        if nopt == 'small':            
+            self.DBlocks.append(DBlock([Nci,16], 4, stride=2, Nlc=0, normalize=True))
+            self.DBlocks.append(DBlock([16,32], 4, stride=2, Nlc=0, normalize=True))
+            self.DBlocks.append(DBlock([32,64], 4, stride=2, Nlc=0, normalize=False))
+            self.DBlocks.append(DBlock([64,128], 4, stride=2, Nlc=0, normalize=False))
+            self.fc = spectral_norm(nn.Linear(128*10, 1))
+        if nopt == 'big':
+            Nlc = 2 
+            self.DBlocks.append(DBlock([Nci,32],4, 2, Nlc=Nlc, normalize=True))
+            self.DBlocks.append(DBlock([32,64],4, 2, Nlc=Nlc, normalize=True))
+            self.DBlocks.append(DBlock([64,128],4, 2, Nlc=Nlc, normalize=False))
+            self.DBlocks.append(DBlock([128,256],4, 2, Nlc=Nlc, normalize=False))   
+            self.fc = spectral_norm(nn.Linear(256*10,1))
+            
+        
+    def forward(self, x):
+        #print('Discriminator')
+        if type(x[1]) != int:
+            xfft = x[1]
+            xfft2 = torch.cat((torch.real(xfft)[:,1:], torch.imag(xfft)[:,1:]),1)
+            x = torch.cat((x[0].unsqueeze(1),xfft2.unsqueeze(1)),1)
+        else:        
+            x = x[0]
+            
+        if x.ndim == 2:
+            x = x.unsqueeze(1)        
+        
+        
+        #forward pass        
+        for j in range(self.NB):
+            x = torch.relu(self.DBlocks[j](x))        
+        x = nn.Flatten()(x)
+        x = self.fc(x)
+        
+        return x
+
+
+#block used in discriminator network
+class DBlock_SN(nn.Module):
+    def __init__(self, Nc_io, kernel_size, stride, Nlc = 0, normalize = True):        
+        super(DBlock_SN, self).__init__()
+        #Nc_io ... number of in/out channels
+        #kernel_size ... size of conv kernel
+        #stride ... stride of first convolution in bock; other convs preserve size
+        #Nlc ... number of size-preserving conv layers
+        #normalize ... whether layers within a block should be normalized
+        
+        
+        self.act = torch.relu
+        #self.act = torch.nn.LeakyReLU(0.2)
+        #self.fnorm = torch.nn.BatchNorm1d
+        self.fnorm = torch.nn.InstanceNorm1d        
+        self.normalize = normalize
+        
+        self.Nlc = Nlc
+        self.conv0 = spectral_norm(nn.Conv1d(Nc_io[0], Nc_io[1], kernel_size, stride=stride))
+        self.bn0 = self.fnorm(Nc_io[0])
+        
+        while(len(Nc_io) <= Nlc+1):
+            Nc_io.append(Nc_io[-1])
+        
+        self.lconv = nn.ModuleList()
+        self.bns = nn.ModuleList()
+        for j in range(Nlc):
+            self.lconv.append(spectral_norm(nn.Conv1d(Nc_io[j+1], Nc_io[j+2], kernel_size, padding='same', stride=1)))
+            self.bns.append(self.fnorm(Nc_io[j+1]))
+            
+    def forward(self, x):
+        if self.normalize:
+            x = self.bn0(x)
+        x = self.act(self.conv0(x))  
+        
+        for j in range(self.Nlc-1):
+            if self.normalize:
+                x = self.bns[j](x)
+            x = self.act(self.lconv[j](x))            
+            #print(x.shape)
+        
+        if self.Nlc > 0:
+            x = self.lconv[-1](x)  
+            
+        return x
+        
+#%% CAMELS
 #############
 ############# CAMELS GAN architecture
 
@@ -380,6 +479,8 @@ class Discriminator_64(nn.Module):
         return self.main(din).view(-1, 1).squeeze(1)
 
 
+
+#%% Ice Cube
 #######################
 #######################
 ######## Ice Cube
@@ -455,8 +556,48 @@ class Generator_IceCube_v0(nn.Module):
             x = self.act(self.aconvT[j](x))
         
         x = self.fconv(x)
+        x = nn.Tanh()(x)
         
         return x.squeeze()
+    
+class Discriminator_IceCube_v0_SN(nn.Module):
+    #(almost) architecture of master's thesis of aholmberg
+    def __init__(self):
+        super(Discriminator_IceCube_v0_SN, self).__init__()
+        
+        af0 = [5,15,25,35]
+        nfilter = 32
+        self.aconv0 = nn.ModuleList()
+        for j in range(len(af0)):
+            self.aconv0.append(spectral_norm(nn.Conv1d(1, nfilter, af0[j], stride=4)))
+            
+        self.act = nn.LeakyReLU(0.2)
+        self.conv1 = spectral_norm(nn.Conv1d(nfilter, 1, 1))
+        
+        afc = [182, 92, 45, 20, 1]
+        self.afc = nn.ModuleList()
+        for j in range(len(afc)-1):
+            self.afc.append(spectral_norm(nn.Linear(afc[j],afc[j+1])))
+        
+    def forward(self, x):
+        x = x[0]
+        if x.ndim == 2:
+            x = x.unsqueeze(1)
+            
+        ax0 = []
+        for j in range(len(self.aconv0)):
+            buf = self.act(self.aconv0[j](x))
+            ax0.append(buf)
+        
+        x1 = torch.cat(ax0,dim=2) 
+        x1 = self.act(self.conv1(x1))
+        
+        
+        for j in range(len(self.afc)-1):
+            x1 = self.act(self.afc[j](x1))
+        x1 = self.afc[-1](x1)
+        
+        return x1
     
     
     

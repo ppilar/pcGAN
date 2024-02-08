@@ -1,23 +1,44 @@
 # -*- coding: utf-8 -*-
+import sys
 import time
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
 
-from pcGAN.utils import init_random_seeds
-from pcGAN.cebm import calculate_multiple_KL
+#from pcGAN.cebm import calculate_multiple_KL
+from pcGAN.utils import *
 from pcGAN.datasets import *
 from pcGAN.utils_summary_plots import *
+from pcGAN.utils_train import initialize_ds, initialize_ptrue_rep
+from pcGAN.representations.rKDE import rKDE
+from pcGAN.representations.utils_representations import calculate_KLs_for_fsig
+
+
+
+
 
 
 #%%   
-
-rand_init, s = init_random_seeds(s=0)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-ds_opt = 1 #choose dataset: 1 ... synthetic, 2 ... Tmaps, 3 ... IceCube-Gen2
-ds, net_ebm, _, ajcx, jcx_long_tails, KL_ylim, _, _, ppath = initialize_cebm_ds(ds_opt) #load trained cebm + corresponding dataset
 
+pars = dict()
+pars['ds_opt'] = 1
+pars['load_ds'] = 1
+pars['load_ptrue_rep'] = 1
+pars['ptrue_rep'] = 'KDE'
+pars['match_opt'] = 'KL'
+pars['Neval'] = 5000
+pars['include_history'] = 0
+
+
+
+ppath0 = ''
+fpath0 =  '../results/datasets/' 
+ds = initialize_ds(pars, device, fpath0)
+ptrue_rep = initialize_ptrue_rep(ds, pars, ppath0, fpath0, update_fsig = False, plot=False)
+pars['match_opt'] = 'KL'
+ptrue_rep2 = initialize_ptrue_rep(ds, pars, ppath0, fpath0, update_fsig = False, plot=False)
 #%% calculate KL values
 
 #initialize parameters
@@ -28,18 +49,18 @@ bsvec = [32,64,256]
 Nbs = len(bsvec)
 lvec = [str(j) for j in bsvec]
 lvec = ['bs='+ str(j) for j in lvec]
-KLs0 = torch.zeros(net_ebm.Nc, Nbs, Nsig, Navg)
-KLs = torch.zeros(net_ebm.Nc, Nbs, Nsig, Navg)
+KLs0 = torch.zeros(ptrue_rep.Nc, Nbs, Nsig, Navg)
+KLs = torch.zeros(ptrue_rep.Nc, Nbs, Nsig, Navg)
+
+#%%
+
 
 for jbs, bs in enumerate(bsvec): #loop over batch sizes 
     print('bs:',str(bs))
-    for jN in range(Navg): #loop over different minibatches
-        sys.stdout.write('\r'+str(jN))
-        sys.stdout.flush()
-        mb, cmb = sample_mb(ds, bs)
-        for jsig, fsig in enumerate(fsig_vec): #loop over different  values of fsig 
-            KLs[:,jbs, jsig, jN] = calculate_multiple_KL(net_ebm, cmb[:,:], fsig = fsig).detach().cpu()
-            KLs0[:,jbs, jsig, jN] = calculate_multiple_KL(net_ebm, cmb[:,:], fsig = fsig, cut_tails=False).detach().cpu()
+    
+    KLs[:, jbs, :, :] = calculate_KLs_for_fsig(ds, ptrue_rep, 'abs', bs, Nsig = Nsig, Navg = Navg)[0]
+    KLs0[:,jbs, :, :] = calculate_KLs_for_fsig(ds, ptrue_rep2, 'KL', bs, Nsig = Nsig, Navg = Navg)[0]
+    
 
 
 #%% determine fsigbest; fsig_best0 corresponds to the case without cutting tails
@@ -51,19 +72,29 @@ fsig_best = fsig_vec[iKLs_min]
 
 
 #%% summary plot
+ppath = '../plots/'
 
-if ds_opt == 1: ds.cplot15_bounds = True
+if pars['ds_opt'] == 1:
+    ajcx = [0, 15, 30]
+    jcx_long_tails = 15
+    KL_ylim = [1e-2, 5e1]
+if pars['ds_opt'] == 3:
+    ajcx = [0,1]
+    KL_ylim = [1e-1, 1e1]
+
+
 labels = [ds.constraint_names[j] for j in ajcx]
-fig, axs = plt.subplots(2,4, figsize=(22,9))
+if len(ajcx) == 3:
+    fig, axs = plt.subplots(2,4, figsize=(22,9))
+if len(ajcx) == 2:
+    fig, axs = plt.subplots(2,3, figsize=(16.5,9))
 fig.tight_layout(h_pad=3)
 plt.rcParams['font.size'] = 14
 for j, jcx in enumerate(ajcx):
     yl_opt = True if j == 0 else False
-    
     axplot_KLdiv(axs[0,j], fsig_vec, KLs[jcx], labels[j], lvec, ylim = KL_ylim, yl_opt = yl_opt)
-    axplot_Gmix(axs[1,j], ds, net_ebm, bsvec, fsig_best, jcx)
+    axplot_Gmix(axs[1,j], ds, ptrue_rep, bsvec, fsig_best, jcx, crange_opt = 'plot')
 
-
-axplot_Gmix(axs[1,3], ds, net_ebm, bsvec, fsig_best0, jcx_long_tails, ' - with long tails')    
-axplot_fsig_best(axs[0,3], fsig_best, lvec)
-plt.savefig(ppath+'ds'+str(ds_opt)+'_KL_summary'+'.pdf')
+axplot_fsig_best(axs[0,len(ajcx)], fsig_best, lvec)
+axs[1,len(ajcx)].set_visible(False)
+plt.savefig(ppath+'ds'+str(pars['ds_opt'])+'_KL_summary'+'.pdf', bbox_inches='tight')

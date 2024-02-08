@@ -1,0 +1,9 @@
+*.pdf
+*.svg
+*.pk
+*.pt
+/results
+/results_new
+/data
+/runs
+/plots
